@@ -6,10 +6,13 @@
 package it.cnr.ilc.lc.clavius.search.entity;
 
 import java.io.Serializable;
+import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
+import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.hibernate.search.annotations.Analyze;
+import org.hibernate.search.annotations.Analyzer;
 import org.hibernate.search.annotations.Facet;
 import org.hibernate.search.annotations.Field;
 import org.hibernate.search.annotations.Indexed;
@@ -27,18 +30,39 @@ public class Annotation implements Serializable {
     private Long id;
 
     @Field
-    private String text;
+    private Long idNeo4j;
+
+    @Field
+    private Long idLetter;
+
+    @Field
+    private Long pageNum;
+
+    @Field
+    @Column(length = 1024)
+    private String leftContext;
+
+    @Column(length = 1024)
+    @Field(analyzer = @Analyzer(impl = WhitespaceAnalyzer.class))
+    private String matched;
+
+    @Field
+    @Column(length = 1024)
+    private String rightContext;
 
     @Field(analyze = Analyze.NO)
     @Facet
     String type;
 
-    public String getText() {
-        return text;
+    @Field(analyzer = @Analyzer(impl = WhitespaceAnalyzer.class))
+    String concepts;
+
+    public String getMatched() {
+        return matched;
     }
 
-    public void setText(String text) {
-        this.text = text;
+    public void setMatched(String matched) {
+        this.matched = matched;
     }
 
     public String getType() {
@@ -57,9 +81,57 @@ public class Annotation implements Serializable {
         this.id = id;
     }
 
+    public Long getIdNeo4j() {
+        return idNeo4j;
+    }
+
+    public void setIdNeo4j(Long idNeo4j) {
+        this.idNeo4j = idNeo4j;
+    }
+
+    public Long getIdLetter() {
+        return idLetter;
+    }
+
+    public void setIdLetter(Long idLetter) {
+        this.idLetter = idLetter;
+    }
+
+    public Long getPageNum() {
+        return pageNum;
+    }
+
+    public void setPageNum(Long pageNum) {
+        this.pageNum = pageNum;
+    }
+
+    public String getLeftContext() {
+        return leftContext;
+    }
+
+    public void setLeftContext(String leftContext) {
+        this.leftContext = leftContext;
+    }
+
+    public String getRightContext() {
+        return rightContext;
+    }
+
+    public void setRightContext(String rightContext) {
+        this.rightContext = rightContext;
+    }
+
+    public String getConcepts() {
+        return concepts;
+    }
+
+    public void setConcepts(String concepts) {
+        this.concepts = concepts;
+    }
+
     @Override
     public String toString() {
-        return String.format("[%d]:[%s]->[%s]", this.id, this.type, this.text);
+        return String.format("Letter=(%d) [%d]:[%s] [%s - %s] [%s], %s", this.idLetter, this.id, this.leftContext, this.type, this.matched, this.rightContext, this.concepts);
     }
 
 }
