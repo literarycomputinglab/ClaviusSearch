@@ -52,11 +52,16 @@ public class Annotation implements Serializable {
 
     @Field(analyze = Analyze.NO)
     @Facet
-    String type;
+    private String type; //denotes
+
+    @Field(analyze = Analyze.NO)
+    @Facet
+    private String resourceObject; //object della tripla
 
     @Field(analyzer = @Analyzer(impl = WhitespaceAnalyzer.class))
-    String concepts;
+    private String concepts;
 
+    
     public String getMatched() {
         return matched;
     }
@@ -119,6 +124,14 @@ public class Annotation implements Serializable {
 
     public void setRightContext(String rightContext) {
         this.rightContext = rightContext;
+    }
+
+    public String getResourceObject() {
+        return resourceObject;
+    }
+
+    public void setResourceObject(String resourceObject) {
+        this.resourceObject = resourceObject;
     }
 
     public String getConcepts() {
