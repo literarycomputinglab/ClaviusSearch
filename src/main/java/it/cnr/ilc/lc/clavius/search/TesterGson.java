@@ -1,7 +1,6 @@
 package it.cnr.ilc.lc.clavius.search;
 
 import com.google.gson.Gson;
-import it.cnr.ilc.lc.clavius.search.entity.Annotation;
 import it.cnr.ilc.lc.clavius.search.entity.TEADocument;
 import java.util.ArrayList;
 import java.util.List;

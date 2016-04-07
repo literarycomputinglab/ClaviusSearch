@@ -3,13 +3,15 @@ package it.cnr.ilc.lc.clavius.search;
 import com.google.gson.Gson;
 import it.cnr.ilc.lc.clavius.search.entity.Annotation;
 import it.cnr.ilc.lc.clavius.search.entity.TEADocument;
-import java.util.Iterator;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.Properties;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.hibernate.search.jpa.FullTextEntityManager;
@@ -26,6 +28,8 @@ import org.hibernate.search.query.dsl.QueryBuilder;
  * @author angelo
  */
 public class Tester {
+
+    private static final Logger logger = LogManager.getLogger(Tester.class);
 
     private static String TEAoutput = "{\"id\":3079,"
             + "\"name\":\"name\","
@@ -46,22 +50,29 @@ public class Tester {
     private static List<Annotation> results;
     private static String jsonResult;
 
+    private static Properties conceptsMap;
+
+    private static int ctxLen = 30;
+
     public static void main(String[] args) throws Exception {
 
-        createEntity(false);
+        readProperies();
+        //createEntity(true);
         //results = search("BOBBE2");
         //results = conceptSearch("Persona Pippo Lavoratore ");
-        results = searchQueryParse("lin?");
+        results = searchQueryParse("triangolo");
         toJson(results);
     }
 
     private static void createEntity(boolean flag) throws InterruptedException {
+
         if (flag) {
             EntityManagerFactory entityManagerFactory = Persistence.createEntityManagerFactory("clavius");
             EntityManager entityManager = entityManagerFactory.createEntityManager();
             FullTextEntityManager fullTextEntityManager = org.hibernate.search.jpa.Search.getFullTextEntityManager(entityManager);
 
             entityManager.getTransaction().begin();
+
             /*
             Annotation a = new Annotation();
             a.setMatched("diametro");
@@ -87,7 +98,6 @@ public class Tester {
             // entityManager.persist(a);
             entityManager.persist(a2);
              */
-
             TEADocument teadoc = parseTEAJson(TEAoutput);
 
             String plainText = teadoc.text;
@@ -96,17 +106,16 @@ public class Tester {
 
             for (TEADocument.Triple triple : triples) {
                 Annotation a = new Annotation();
-                a.setLeftContext(plainText.substring(triple.start > 30 ? triple.start - 30 : 0, triple.start));
-                a.setRightContext(plainText.substring(triple.end, triple.end + 30 < plainText.length() ? triple.end + 30 : plainText.length()));
+                a.setLeftContext(plainText.substring(triple.start > ctxLen ? triple.start - ctxLen : 0, triple.start));
+                a.setRightContext(plainText.substring(triple.end, triple.end + ctxLen < plainText.length() ? triple.end + ctxLen : plainText.length()));
                 a.setIdLetter(Long.valueOf(idLetter));
-                a.setConcepts("concepts-" + triple.object.substring(triple.object.lastIndexOf("/"))); //@FIX triple.object sara' la chiave di accesso alla mappa dei concetti
-                a.setType("denotes-" + triple.object.substring(triple.object.lastIndexOf("/")));
+                a.setConcept(conceptsMap.getProperty(triple.object.substring(triple.object.lastIndexOf("/") + 1))); //@FIX triple.object sara' la chiave di accesso alla mappa dei concetti
+                a.setType(triple.object.substring(triple.object.lastIndexOf("/") + 1));
                 a.setResourceObject(triple.object);
                 a.setIdNeo4j(teadoc.id);
-
+                a.setMatched(plainText.substring(triple.start, triple.end));
                 entityManager.persist(a);
-                System.err.println("createEntity: " + a);
-
+                logger.info("createEntity: " + a);
             }
 
             fullTextEntityManager.createIndexer().startAndWait();
@@ -128,7 +137,7 @@ public class Tester {
 
         List result = null;
         QueryParser parser = new QueryParser(
-                "concepts",
+                "concept",
                 fullTextEntityManager.getSearchFactory().getAnalyzer(Annotation.class)
         );
 
@@ -141,8 +150,7 @@ public class Tester {
             result = fullTextQuery.getResultList();
 
         } catch (ParseException ex) {
-            System.err.println("AAAAAAAAAAAAHHHHHHHHHH");
-            Logger.getLogger(Tester.class.getName()).log(Level.SEVERE, null, ex);
+            logger.error(ex);
         }
 
         entityManager.getTransaction().commit();
@@ -165,7 +173,7 @@ public class Tester {
         QueryBuilder qb = fullTextEntityManager.getSearchFactory().buildQueryBuilder().forEntity(Annotation.class).get();
         org.apache.lucene.search.Query query = qb
                 .keyword()
-                .onField("concepts")
+                .onField("concept")
                 .matching(w)
                 .createQuery();
 
@@ -258,4 +266,27 @@ public class Tester {
         return teadoc;
 
     }
+
+    private static void readProperies() {
+
+        InputStream input = null;
+
+        try {
+            input = Tester.class.getResourceAsStream("/concepts-map.properties");
+            // load a properties file
+            conceptsMap = new Properties();
+            conceptsMap.load(input);
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        } finally {
+            if (input != null) {
+                try {
+                    input.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
 }

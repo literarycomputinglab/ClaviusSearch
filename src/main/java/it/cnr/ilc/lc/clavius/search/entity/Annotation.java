@@ -59,7 +59,7 @@ public class Annotation implements Serializable {
     private String resourceObject; //object della tripla
 
     @Field(analyzer = @Analyzer(impl = WhitespaceAnalyzer.class))
-    private String concepts;
+    private String concept;
 
     
     public String getMatched() {
@@ -134,17 +134,17 @@ public class Annotation implements Serializable {
         this.resourceObject = resourceObject;
     }
 
-    public String getConcepts() {
-        return concepts;
+    public String getConcept() {
+        return concept;
     }
 
-    public void setConcepts(String concepts) {
-        this.concepts = concepts;
+    public void setConcept(String concept) {
+        this.concept = concept;
     }
 
     @Override
     public String toString() {
-        return String.format("Letter=(%d) [%d]:[%s] [%s - %s] [%s], %s", this.idLetter, this.id, this.leftContext, this.type, this.matched, this.rightContext, this.concepts);
+        return String.format("Letter=(%d) [%d]:[%s] [%s - %s] [%s], %s, %s", this.idLetter, this.id, this.leftContext, this.type, this.matched, this.rightContext, this.concept, this.resourceObject);
     }
 
 }
