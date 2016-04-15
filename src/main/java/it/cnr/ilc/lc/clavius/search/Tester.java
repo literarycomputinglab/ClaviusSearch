@@ -2,6 +2,7 @@ package it.cnr.ilc.lc.clavius.search;
 
 import com.google.gson.Gson;
 import it.cnr.ilc.lc.clavius.search.entity.Annotation;
+import it.cnr.ilc.lc.clavius.search.entity.PlainText;
 import it.cnr.ilc.lc.clavius.search.entity.TEADocument;
 import java.io.IOException;
 import java.io.InputStream;
@@ -45,7 +46,7 @@ public class Tester {
             + "(e1) rdfs:seeAlso dbr:Triangle\\\\n"
             + "(e1) foaf:page https://en.wikipedia.org/wiki/Triangle\\\\n+++\\\\n\\\\n\\\\n\\\\n\","
             + "\"text\":\"Oxygonium vero, quod tres habet acutos angulos. Omne\\ntriangulum Oxygonium, sive acutangulum, potest esse \\nvel aequilaterum, vel isosceles, vel scalenum, \\nut cernere licet in triangulis, quae in speciebus prioris \","
-            + "\"idLetter\":\"319\","
+            + "\"idDoc\":\"319\","
             + "\"triples\":[{\"start\":18,\"end\":25,\"subject\":\"(s1)\",\"predicate\":\"rdfs:seeAlso\",\"object\":\"cll:math/triangulum_acutangulum\"},{\"start\":38,\"end\":45,\"subject\":\"(s2)\",\"predicate\":\"rdfs:seeAlso\",\"object\":\"cll:math/triangulum_oxygonium\"}]}";
     private static List<Annotation> results;
     private static String jsonResult;
@@ -60,8 +61,14 @@ public class Tester {
         //createEntity(true);
         //results = search("BOBBE2");
         //results = conceptSearch("Persona Pippo Lavoratore ");
+        /*
         results = searchQueryParse("triangolo");
         toJson(results);
+         */
+
+        //createFullTextEntity(TEAoutput);
+        fullTextSearch("triangul*");
+
     }
 
     private static void createEntity(boolean flag) throws InterruptedException {
@@ -101,14 +108,14 @@ public class Tester {
             TEADocument teadoc = parseTEAJson(TEAoutput);
 
             String plainText = teadoc.text;
-            String idLetter = teadoc.idLetter;
+            String idDoc = teadoc.idDoc;
             List<TEADocument.Triple> triples = teadoc.triples;
 
             for (TEADocument.Triple triple : triples) {
                 Annotation a = new Annotation();
                 a.setLeftContext(plainText.substring(triple.start > ctxLen ? triple.start - ctxLen : 0, triple.start));
                 a.setRightContext(plainText.substring(triple.end, triple.end + ctxLen < plainText.length() ? triple.end + ctxLen : plainText.length()));
-                a.setIdLetter(Long.valueOf(idLetter));
+                a.setIdDoc(Long.valueOf(idDoc));
                 a.setConcept(conceptsMap.getProperty(triple.object.substring(triple.object.lastIndexOf("/") + 1))); //@FIX triple.object sara' la chiave di accesso alla mappa dei concetti
                 a.setType(triple.object.substring(triple.object.lastIndexOf("/") + 1));
                 a.setResourceObject(triple.object);
@@ -227,6 +234,40 @@ public class Tester {
         //fullTextEntityManager.close(); // attenzione se resta aperto non indicizza lucene
         return result;
     }
+    
+    
+    private static List<PlainText> fullTextSearch(String w) {
+        EntityManagerFactory entityManagerFactory = Persistence.createEntityManagerFactory("clavius");
+        EntityManager entityManager = entityManagerFactory.createEntityManager();
+
+        FullTextEntityManager fullTextEntityManager = org.hibernate.search.jpa.Search.getFullTextEntityManager(entityManager);
+
+        entityManager.getTransaction().begin();
+
+        QueryBuilder qb = fullTextEntityManager.getSearchFactory().buildQueryBuilder().forEntity(PlainText.class).get();
+        org.apache.lucene.search.Query query = qb
+                .keyword().wildcard()
+                .onField("content")
+                .matching(w)
+                .createQuery();
+
+        javax.persistence.Query persistenceQuery
+                = fullTextEntityManager.createFullTextQuery(query, PlainText.class);
+        List<PlainText> result = persistenceQuery.getResultList();
+
+        for (PlainText a : result) {
+            System.err.println("Search (" + a.getContent() + ")");
+        }
+
+        entityManager.getTransaction().commit();
+        fullTextEntityManager.flushToIndexes();
+        fullTextEntityManager.clear();
+        entityManager.close();
+        entityManagerFactory.close();
+
+        //fullTextEntityManager.close(); // attenzione se resta aperto non indicizza lucene
+        return result;
+    }
 
     private static void toJson(List<Annotation> loa) {
 
@@ -289,4 +330,37 @@ public class Tester {
         }
     }
 
+    private static void createFullTextEntity(String json) {
+
+        EntityManagerFactory entityManagerFactory = Persistence.createEntityManagerFactory("clavius");
+        EntityManager entityManager = entityManagerFactory.createEntityManager();
+        FullTextEntityManager fullTextEntityManager = org.hibernate.search.jpa.Search.getFullTextEntityManager(entityManager);
+
+        entityManager.getTransaction().begin();
+
+        TEADocument teadoc = parseTEAJson(json);
+        String content = teadoc.text;
+        String idDoc = teadoc.idDoc;
+        String extra = teadoc.name;
+
+        PlainText ft = new PlainText();
+
+        ft.setIdDoc(idDoc);
+        ft.setContent(content);
+        ft.setExtra(extra);
+
+        entityManager.persist(ft);
+
+//        try {
+//            fullTextEntityManager.createIndexer().startAndWait();
+//        } catch (InterruptedException ex) {
+//            java.util.logging.Logger.getLogger(Tester.class.getName()).log(Level.SEVERE, null, ex);
+//        }
+        entityManager.getTransaction().commit();
+        fullTextEntityManager.flushToIndexes();
+        fullTextEntityManager.clear();
+        entityManager.close();
+        entityManagerFactory.close();
+
+    }
 }
