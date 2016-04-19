@@ -6,6 +6,7 @@ import it.cnr.ilc.lc.clavius.search.entity.PlainText;
 import it.cnr.ilc.lc.clavius.search.entity.TEADocument;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Properties;
 import javax.persistence.EntityManager;
@@ -13,8 +14,24 @@ import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.Fields;
+import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.PostingsEnum;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.index.Terms;
+import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.search.DocIdSetIterator;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.spans.SpanQuery;
+import org.apache.lucene.search.spans.SpanTermQuery;
+import org.apache.lucene.search.spans.SpanWeight;
+import org.apache.lucene.search.spans.Spans;
+import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.FSDirectory;
+import org.apache.lucene.util.BytesRef;
 import org.hibernate.search.jpa.FullTextEntityManager;
 import org.hibernate.search.jpa.FullTextQuery;
 import org.hibernate.search.query.dsl.QueryBuilder;
@@ -58,7 +75,7 @@ public class Tester {
     public static void main(String[] args) throws Exception {
 
         readProperies();
-        //createEntity(true);
+        // createEntity(true);
         //results = search("BOBBE2");
         //results = conceptSearch("Persona Pippo Lavoratore ");
         /*
@@ -67,8 +84,8 @@ public class Tester {
          */
 
         //createFullTextEntity(TEAoutput);
-        fullTextSearch("triangul*");
-
+        //fullTextSearch("triangul*");
+        searchWithContext("triangulum");
     }
 
     private static void createEntity(boolean flag) throws InterruptedException {
@@ -234,8 +251,7 @@ public class Tester {
         //fullTextEntityManager.close(); // attenzione se resta aperto non indicizza lucene
         return result;
     }
-    
-    
+
     private static List<PlainText> fullTextSearch(String w) {
         EntityManagerFactory entityManagerFactory = Persistence.createEntityManagerFactory("clavius");
         EntityManager entityManager = entityManagerFactory.createEntityManager();
@@ -246,7 +262,8 @@ public class Tester {
 
         QueryBuilder qb = fullTextEntityManager.getSearchFactory().buildQueryBuilder().forEntity(PlainText.class).get();
         org.apache.lucene.search.Query query = qb
-                .keyword().wildcard()
+                .keyword()
+                .wildcard()
                 .onField("content")
                 .matching(w)
                 .createQuery();
@@ -363,4 +380,111 @@ public class Tester {
         entityManagerFactory.close();
 
     }
+
+    private static void searchWithContext(String term) {
+
+        try {
+            logger.info("searchWithContext(" + term + ")");
+            SpanQuery spanQuery = new SpanTermQuery(new Term("content", term));
+            Directory indexDirectory
+                    = FSDirectory.open(Paths.get("/var/lucene/claviusTest/indexes/it.cnr.ilc.lc.clavius.search.entity.PlainText"));
+            IndexReader indexReader = DirectoryReader.open(indexDirectory);
+            IndexSearcher searcher = new IndexSearcher(indexReader);
+            IndexReader reader = searcher.getIndexReader();
+            spanQuery = (SpanQuery) spanQuery.rewrite(reader);
+            SpanWeight weight = (SpanWeight) searcher.createWeight(spanQuery, false);
+
+//            Spans spans2 = weight.getSpans(reader.leaves().get(0),
+//                    SpanWeight.Postings.OFFSETS);
+            Spans spans = weight.getSpans(reader.leaves().get(0), SpanWeight.Postings.PAYLOADS);
+            int nextDoc = spans.nextDoc();
+            logger.info("spans.docID(): " + nextDoc);
+            Fields fields = reader.getTermVectors(nextDoc);
+            Terms terms = fields.terms("content");
+
+            TermsEnum termsEnum = terms.iterator();
+            BytesRef text;
+            int start = spans.startPosition() - 3;
+            int end = spans.endPosition() + 3;
+            while ((text = termsEnum.next()) != null) {
+                //could store the BytesRef here, but String is easier for this example
+                String s = new String(text.bytes, text.offset, text.length);
+//                DocsAndPositionsEnum positionsEnum = termsEnum.docsAndPositions(null, null);
+                PostingsEnum postingEnum = termsEnum.postings(null);
+
+                if (postingEnum.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
+                    int i = 0;
+                    int position = -1;
+                    while (spans.nextStartPosition() != Spans.NO_MORE_POSITIONS) {
+                        while (i < postingEnum.freq() && (position = postingEnum.nextPosition()) != -1) {
+                            if (position >= start && position <= end) {
+                                logger.info("pos: " + position + ", term: " + s + " offset: " + text + " length: " + text.length);
+                            }
+                            i++;
+                        }
+                    }
+                }
+
+//                while (postingEnum.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
+//                }
+//                
+//                
+//                if (positionsEnum.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
+//                    int i = 0;
+//                    int position = -1;
+//                    while (i < positionsEnum.freq() && (position = positionsEnum.nextPosition()) != -1) {
+//                        if (position >= start && position <= end) {
+//                            entries.put(position, s);
+//                        }
+//                        i++;
+//                    }
+//                }
+//            }
+//            int i = 0;
+//            int spanStart = -1;
+//            int spanEnd = -1;
+//            int docID = -1;
+////            while (spans.nextDoc() != Spans.NO_MORE_DOCS) {
+//                while (spans.nextStartPosition() != Spans.NO_MORE_POSITIONS) {
+//                    spanStart = spans.startPosition();
+//                    spanEnd = spans.endPosition();
+//                    docID = spans.docID();
+//                    i++;
+//                    logger.info("spanStart: " + spanStart + ", spanEnd: " + spanEnd + ", docID: " + docID);
+//                }
+//            }
+            }
+        } catch (IOException e) {
+            logger.error(e.getMessage());
+        }
+
+    }
+//    
+//    private void testOffsetForSingleSpanMatch(SpanOnlyParser p, String s,
+//            int trueDocID, int trueSpanStart, int trueSpanEnd) throws Exception {
+//        SpanQuery q = (SpanQuery) p.parse(s);
+//        List<LeafReaderContext> ctxs = reader.leaves();
+//        assert (ctxs.size() == 1);
+//        LeafReaderContext ctx = ctxs.get(0);
+//        q = (SpanQuery) q.rewrite(ctx.reader());
+//        SpanWeight spanWeight = q.createWeight(searcher, true);
+//        Spans spans = spanWeight.getSpans(ctx, null, SpanWeight.Postings.POSITIONS);
+//        
+//        int i = 0;
+//        int spanStart = -1;
+//        int spanEnd = -1;
+//        int docID = -1;
+//        while (spans.nextDoc() != Spans.NO_MORE_DOCS) {
+//            while (spans.nextStartPosition() != Spans.NO_MORE_POSITIONS) {
+//                spanStart = spans.startPosition();
+//                spanEnd = spans.endPosition();
+//                docID = spans.docID();
+//                i++;
+//            }
+//        }
+//        assertEquals("should only be one matching span", 1, i);
+//        assertEquals("doc id", trueDocID, docID);
+//        assertEquals("span start", trueSpanStart, spanStart);
+//        assertEquals("span end", trueSpanEnd, spanEnd);
+//    }
 }

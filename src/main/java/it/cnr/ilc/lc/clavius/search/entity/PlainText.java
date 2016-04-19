@@ -19,6 +19,7 @@ import org.hibernate.search.annotations.CharFilterDef;
 import org.hibernate.search.annotations.Field;
 import org.hibernate.search.annotations.Indexed;
 import org.hibernate.search.annotations.Parameter;
+import org.hibernate.search.annotations.TermVector;
 import org.hibernate.search.annotations.TokenizerDef;
 
 /**
@@ -42,7 +43,7 @@ public class PlainText implements Serializable {
     @GeneratedValue
     private Long id;
 
-    @Field(analyzer = @Analyzer(definition = "claviusPlainTextAnalyer"))
+    @Field(analyzer = @Analyzer(definition = "claviusPlainTextAnalyer"), termVector = TermVector.WITH_POSITION_OFFSETS)
     @Column(length = 65536)
     private String content;
 
