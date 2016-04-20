@@ -9,12 +9,17 @@ import java.io.InputStream;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Properties;
+import java.util.logging.SimpleFormatter;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.DocsAndPositionsEnum;
 import org.apache.lucene.index.Fields;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.PostingsEnum;
@@ -25,6 +30,17 @@ import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.highlight.Highlighter;
+import org.apache.lucene.search.highlight.InvalidTokenOffsetsException;
+import org.apache.lucene.search.highlight.QueryScorer;
+import org.apache.lucene.search.highlight.SimpleFragmenter;
+import org.apache.lucene.search.highlight.SimpleHTMLFormatter;
+import org.apache.lucene.search.highlight.SimpleSpanFragmenter;
+import org.apache.lucene.search.highlight.TextFragment;
+import org.apache.lucene.search.highlight.TokenSources;
 import org.apache.lucene.search.spans.SpanQuery;
 import org.apache.lucene.search.spans.SpanTermQuery;
 import org.apache.lucene.search.spans.SpanWeight;
@@ -51,9 +67,9 @@ public class Tester {
 
     private static String TEAoutput = "{\"id\":3079,"
             + "\"name\":\"name\","
-            + "\"code\":\"\\\\n\\u003cOxygonium vero, quod tres habet acutos angulos\\u003e(s1). "
+            + "\"code\":\"\\\\n\\u003cOxygonium vero, quod tres bobbe habet acutos angulos\\u003e(s1). "
             + "Omne\\\\n\\u003ctriangulum Oxygonium\\u003e(t1), sive \\u003cacutangulum\\u003e(t2), potest esse \\\\nvel \\u003caequilaterum\\u003e(t3), "
-            + "vel \\u003cisosceles\\u003e(t4), vel \\u003cscalenum\\u003e(t5), \\\\nut cernere licet in \\u003ctriangulis\\u003e(e1), "
+            + "vel \\u003cisosceles\\u003e(t4), vel bobbe \\u003cscalenum\\u003e(t5), \\\\nut cernere licet in \\u003ctriangulis\\u003e(e1), "
             + "quae in speciebus prioris \\\\n\\\\ntest\\\\n\\\\ndivisionis spectanda exhibuimus, ne eadem hic frustra repetantur.\\\\n+++\\\\n"
             + "(s1) lvont:language lexvo:iso639-3/lat\\\\n(s1) lvont:translation \\\\\\\"...\\\\\\\"\\\\n(t1) rdfs:seeAlso cll:math/triangulum_oxygonium\\\\n"
             + "(t2) rdfs:seeAlso cll:math/triangulum_acutangulum\\\\n"
@@ -62,7 +78,7 @@ public class Tester {
             + "(t5) rdfs:seeAlso cll:math/triangulum_scalenum\\\\n"
             + "(e1) rdfs:seeAlso dbr:Triangle\\\\n"
             + "(e1) foaf:page https://en.wikipedia.org/wiki/Triangle\\\\n+++\\\\n\\\\n\\\\n\\\\n\","
-            + "\"text\":\"Oxygonium vero, quod tres habet acutos angulos. Omne\\ntriangulum Oxygonium, sive acutangulum, potest esse \\nvel aequilaterum, vel isosceles, vel scalenum, \\nut cernere licet in triangulis, quae in speciebus prioris \","
+            + "\"text\":\"Oxygonium vero, quod bobbe malle tres  habet acutos angulos. Omne\\ntriangulum Oxygonium, sive acutangulum, potest esse \\nvel bobbe malle aequilaterum, vel isosceles, vel scalenum, \\nut cernere licet in triangulis, quae in speciebus prioris \","
             + "\"idDoc\":\"319\","
             + "\"triples\":[{\"start\":18,\"end\":25,\"subject\":\"(s1)\",\"predicate\":\"rdfs:seeAlso\",\"object\":\"cll:math/triangulum_acutangulum\"},{\"start\":38,\"end\":45,\"subject\":\"(s2)\",\"predicate\":\"rdfs:seeAlso\",\"object\":\"cll:math/triangulum_oxygonium\"}]}";
     private static List<Annotation> results;
@@ -74,7 +90,7 @@ public class Tester {
 
     public static void main(String[] args) throws Exception {
 
-        readProperies();
+        //readProperies();
         // createEntity(true);
         //results = search("BOBBE2");
         //results = conceptSearch("Persona Pippo Lavoratore ");
@@ -82,10 +98,9 @@ public class Tester {
         results = searchQueryParse("triangolo");
         toJson(results);
          */
-
         //createFullTextEntity(TEAoutput);
         //fullTextSearch("triangul*");
-        searchWithContext("triangulum");
+        searchWithHighlighter("bobbe");
     }
 
     private static void createEntity(boolean flag) throws InterruptedException {
@@ -365,9 +380,8 @@ public class Tester {
         ft.setIdDoc(idDoc);
         ft.setContent(content);
         ft.setExtra(extra);
-
+        System.err.println("content " + content);
         entityManager.persist(ft);
-
 //        try {
 //            fullTextEntityManager.createIndexer().startAndWait();
 //        } catch (InterruptedException ex) {
@@ -381,6 +395,58 @@ public class Tester {
 
     }
 
+    private static void searchWithHighlighter(String term) throws IOException, ParseException, InvalidTokenOffsetsException {
+
+        logger.info("searchWithContext2 (" + term + ")");
+        Directory indexDirectory
+                = FSDirectory.open(Paths.get("/var/lucene/claviusTest/indexes/it.cnr.ilc.lc.clavius.search.entity.PlainText"));
+        DirectoryReader ireader = DirectoryReader.open(indexDirectory);
+
+        IndexSearcher searcher = new IndexSearcher(ireader);
+        QueryParser parser = new QueryParser("content", new StandardAnalyzer());
+        Query query = parser.parse(term);
+
+        TopDocs hits = searcher.search(query, 10);
+
+        SimpleHTMLFormatter htmlFormatter = new SimpleHTMLFormatter();
+        Highlighter highlighter = new Highlighter(htmlFormatter, new QueryScorer(query));
+        highlighter.setTextFragmenter(new SimpleFragmenter(100));
+        for (int i = 0; i < hits.totalHits; i++) {
+            int id = hits.scoreDocs[i].doc;
+            Document doc = searcher.doc(id);
+            String text = doc.get("content");
+            TokenStream tokenStream = TokenSources.getAnyTokenStream(searcher.getIndexReader(), id, "content", new StandardAnalyzer());
+            TextFragment[] frag = highlighter.getBestTextFragments(tokenStream, text, false, 10);//highlighter.getBestFragments(tokenStream, text, 3, "...");
+            for (int j = 0; j < frag.length; j++) {
+                if ((frag[j] != null) && (frag[j].getScore() > 0)) {
+                    logger.info("frag["+j+"] "+frag[j].toString());
+                }
+            }
+            
+        }
+    }
+
+    private static void searchWithContext2(String term) throws IOException {
+
+        logger.info("searchWithContext2(" + term + ")");
+        Directory indexDirectory
+                = FSDirectory.open(Paths.get("/var/lucene/claviusTest/indexes/it.cnr.ilc.lc.clavius.search.entity.PlainText"));
+        DirectoryReader ireader = DirectoryReader.open(indexDirectory);
+
+        PostingsEnum pe = ireader.leaves().get(0).reader().postings(new Term("content", term));
+        DocsAndPositionsEnum dape = ireader.leaves().get(0).reader().termPositionsEnum(new Term("content", term));
+        if (null != dape) {
+            while (dape.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
+                logger.info("dape.freq(): " + dape.freq() + " in " + dape.docID());
+//                for (int i = 0; i < dape.freq(); i++) {
+//                    int position = dape.nextPosition();
+//                    BytesRef payload = dape.getPayload();
+//                    logger.info("dape.getPayload(): " + new String(payload.bytes) + " in " + dape.docID());
+//                }
+            }
+        }
+    }
+
     private static void searchWithContext(String term) {
 
         try {
@@ -388,44 +454,74 @@ public class Tester {
             SpanQuery spanQuery = new SpanTermQuery(new Term("content", term));
             Directory indexDirectory
                     = FSDirectory.open(Paths.get("/var/lucene/claviusTest/indexes/it.cnr.ilc.lc.clavius.search.entity.PlainText"));
-            IndexReader indexReader = DirectoryReader.open(indexDirectory);
+            DirectoryReader indexReader = DirectoryReader.open(indexDirectory);
             IndexSearcher searcher = new IndexSearcher(indexReader);
             IndexReader reader = searcher.getIndexReader();
-            spanQuery = (SpanQuery) spanQuery.rewrite(reader);
-            SpanWeight weight = (SpanWeight) searcher.createWeight(spanQuery, false);
-
+            //spanQuery = (SpanQuery) spanQuery.rewrite(reader);
+            //SpanWeight weight = (SpanWeight) searcher.createWeight(spanQuery, false);
+            Spans spans = spanQuery.createWeight(searcher, false)
+                    .getSpans(searcher.getIndexReader().leaves().get(0), SpanWeight.Postings.POSITIONS);
 //            Spans spans2 = weight.getSpans(reader.leaves().get(0),
 //                    SpanWeight.Postings.OFFSETS);
-            Spans spans = weight.getSpans(reader.leaves().get(0), SpanWeight.Postings.PAYLOADS);
-            int nextDoc = spans.nextDoc();
-            logger.info("spans.docID(): " + nextDoc);
-            Fields fields = reader.getTermVectors(nextDoc);
-            Terms terms = fields.terms("content");
+            //Spans spans = weight.getSpans(reader.leaves().get(0), SpanWeight.Postings.POSITIONS);
+            ScoreDoc[] sc = searcher.search(spanQuery, 10).scoreDocs;
 
-            TermsEnum termsEnum = terms.iterator();
-            BytesRef text;
-            int start = spans.startPosition() - 3;
-            int end = spans.endPosition() + 3;
-            while ((text = termsEnum.next()) != null) {
-                //could store the BytesRef here, but String is easier for this example
-                String s = new String(text.bytes, text.offset, text.length);
+            logger.info("hits :" + sc.length);
+
+            int i;
+            if (null != spans) {
+//                while ((nextDoc = spans.nextDoc()) != Spans.NO_MORE_DOCS) {
+                for (int k = 0; k < sc.length; k++) {
+                    int docId = sc[k].doc;
+                    logger.info("docID: " + docId);
+                    int newDocID = spans.advance(docId);
+                    logger.info("newDocID: " + newDocID);
+
+                    int nextSpan = -1;
+                    while ((nextSpan = spans.nextStartPosition()) != Spans.NO_MORE_POSITIONS) {
+                        logger.info("nextSpan             : " + nextSpan);
+                        logger.info("spans.startPosition(): " + spans.startPosition());
+                        logger.info("spans.endPosition()  : " + spans.endPosition());
+                        logger.info("spans.width()        : " + spans.width());
+
+                        Fields fields = reader.getTermVectors(docId);
+                        Terms terms = fields.terms("content");
+
+                        TermsEnum termsEnum = terms.iterator();
+                        BytesRef text;
+                        PostingsEnum postingEnum = null;
+                        int start = spans.startPosition() - 3;
+                        int end = spans.endPosition() + 3;
+                        while ((text = termsEnum.next()) != null) {
+                            //could store the BytesRef here, but String is easier for this example
+                            String s = new String(text.bytes, text.offset, text.length);
 //                DocsAndPositionsEnum positionsEnum = termsEnum.docsAndPositions(null, null);
-                PostingsEnum postingEnum = termsEnum.postings(null);
+                            postingEnum = termsEnum.postings(postingEnum);
+                            if (postingEnum.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
+                                i = 0;
+                                int position = -1;
+                                while (i < postingEnum.freq() && (position = postingEnum.nextPosition()) != -1) {
+                                    if (position >= start && position <= end) {
+                                        logger.info("pos: " + position + ", term: " + s + " offset: " + text.offset + " length: " + text.length);
+                                    }
+                                    i++;
+                                }
 
-                if (postingEnum.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
-                    int i = 0;
-                    int position = -1;
-                    while (spans.nextStartPosition() != Spans.NO_MORE_POSITIONS) {
-                        while (i < postingEnum.freq() && (position = postingEnum.nextPosition()) != -1) {
-                            if (position >= start && position <= end) {
-                                logger.info("pos: " + position + ", term: " + s + " offset: " + text + " length: " + text.length);
                             }
-                            i++;
+
                         }
                     }
                 }
+            } else {
+                logger.info("no " + term + " found!");
+            }
+        } catch (IOException e) {
+            logger.error(e.getMessage());
+        }
+        logger.info("End.");
+    }
 
-//                while (postingEnum.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
+    //                while (postingEnum.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
 //                }
 //                
 //                
@@ -453,12 +549,6 @@ public class Tester {
 //                    logger.info("spanStart: " + spanStart + ", spanEnd: " + spanEnd + ", docID: " + docID);
 //                }
 //            }
-            }
-        } catch (IOException e) {
-            logger.error(e.getMessage());
-        }
-
-    }
 //    
 //    private void testOffsetForSingleSpanMatch(SpanOnlyParser p, String s,
 //            int trueDocID, int trueSpanStart, int trueSpanEnd) throws Exception {
