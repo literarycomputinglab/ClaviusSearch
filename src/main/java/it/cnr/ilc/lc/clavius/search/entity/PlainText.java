@@ -48,7 +48,7 @@ public class PlainText implements Serializable {
     @Column(length = 65536)
     private String content;
 
-    @Field(analyze = Analyze.NO)
+    @Field(analyze = Analyze.NO, store = Store.YES)
     private String idDoc;
 
     @Field(analyzer = @Analyzer(definition = "claviusPlainTextAnalyer"))

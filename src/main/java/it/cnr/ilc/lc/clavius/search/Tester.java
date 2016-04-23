@@ -78,7 +78,7 @@ public class Tester {
             + "(t5) rdfs:seeAlso cll:math/triangulum_scalenum\\\\n"
             + "(e1) rdfs:seeAlso dbr:Triangle\\\\n"
             + "(e1) foaf:page https://en.wikipedia.org/wiki/Triangle\\\\n+++\\\\n\\\\n\\\\n\\\\n\","
-            + "\"text\":\"Oxygonium vero, quod bobbe malle tres  habet acutos angulos. Omne\\ntriangulum Oxygonium, sive acutangulum, potest esse \\nvel bobbe malle aequilaterum, vel isosceles, vel scalenum, \\nut cernere licet in triangulis, quae in speciebus prioris \","
+            + "\"text\":\"Oxygonium vero, quod bobbe mallemalle tres  habet acutos angulos. Omne\\ntriangulum Oxygonium, sive acutangulum, potest esse \\nvel bobbe mallemalle aequilaterum, vel isosceles, vel scalenum, \\nut cernere licet in triangulis, quae in speciebus prioris \","
             + "\"idDoc\":\"319\","
             + "\"triples\":[{\"start\":18,\"end\":25,\"subject\":\"(s1)\",\"predicate\":\"rdfs:seeAlso\",\"object\":\"cll:math/triangulum_acutangulum\"},{\"start\":38,\"end\":45,\"subject\":\"(s2)\",\"predicate\":\"rdfs:seeAlso\",\"object\":\"cll:math/triangulum_oxygonium\"}]}";
     private static List<Annotation> results;
@@ -98,7 +98,7 @@ public class Tester {
         results = searchQueryParse("triangolo");
         toJson(results);
          */
-        //createFullTextEntity(TEAoutput);
+       // createFullTextEntity(TEAoutput);
         //fullTextSearch("triangul*");
         searchWithHighlighter("bobbe");
     }
@@ -147,7 +147,7 @@ public class Tester {
                 Annotation a = new Annotation();
                 a.setLeftContext(plainText.substring(triple.start > ctxLen ? triple.start - ctxLen : 0, triple.start));
                 a.setRightContext(plainText.substring(triple.end, triple.end + ctxLen < plainText.length() ? triple.end + ctxLen : plainText.length()));
-                a.setIdDoc(Long.valueOf(idDoc));
+                a.setIdDoc(idDoc);
                 a.setConcept(conceptsMap.getProperty(triple.object.substring(triple.object.lastIndexOf("/") + 1))); //@FIX triple.object sara' la chiave di accesso alla mappa dei concetti
                 a.setType(triple.object.substring(triple.object.lastIndexOf("/") + 1));
                 a.setResourceObject(triple.object);
@@ -409,20 +409,26 @@ public class Tester {
         TopDocs hits = searcher.search(query, 10);
 
         SimpleHTMLFormatter htmlFormatter = new SimpleHTMLFormatter();
-        Highlighter highlighter = new Highlighter(htmlFormatter, new QueryScorer(query));
-        highlighter.setTextFragmenter(new SimpleFragmenter(100));
+        //Highlighter highlighter = new Highlighter(htmlFormatter, new QueryScorer(query));
+        ClaviusHighlighter highlighter = new ClaviusHighlighter(htmlFormatter, new QueryScorer(query));
+        highlighter.setTextFragmenter(new SimpleFragmenter(9));
         for (int i = 0; i < hits.totalHits; i++) {
             int id = hits.scoreDocs[i].doc;
             Document doc = searcher.doc(id);
+            String idDoc = doc.get("idDoc");
             String text = doc.get("content");
             TokenStream tokenStream = TokenSources.getAnyTokenStream(searcher.getIndexReader(), id, "content", new StandardAnalyzer());
-            TextFragment[] frag = highlighter.getBestTextFragments(tokenStream, text, false, 10);//highlighter.getBestFragments(tokenStream, text, 3, "...");
-            for (int j = 0; j < frag.length; j++) {
-                if ((frag[j] != null) && (frag[j].getScore() > 0)) {
-                    logger.info("frag["+j+"] "+frag[j].toString());
-                }
+            List<Annotation> frag = highlighter.getBestTextClaviusFragments(tokenStream, idDoc, false, 10);//highlighter.getBestFragments(tokenStream, text, 3, "...");
+            for (int j = 0; j < frag.size(); j++) {
+                    logger.info("idDoc: " + idDoc + ", Annotation["+j+"] "+frag.get(j).toString());
             }
-            
+//            TextFragment[] frag = highlighter.getBestTextFragments(tokenStream, text, false, 10);//highlighter.getBestFragments(tokenStream, text, 3, "...");
+//            for (int j = 0; j < frag.length; j++) {
+//                if ((frag[j] != null) && (frag[j].getScore() > 0)) {
+//                    logger.info("frag["+j+"] "+frag[j].toString());
+//                }
+//            }
+//            
         }
     }
 
